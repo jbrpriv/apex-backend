@@ -24,8 +24,15 @@ const seed = async () => {
 };
 
 const runSeeders = async () => {
-  await seedAdmin();
-  await seed();
+  try {
+    console.log('Starting seedAdmin...');
+    await seedAdmin();
+    console.log('seedAdmin done, starting seed...');
+    await seed();
+    console.log('Seeders done');
+  } catch (err) {
+    console.error('Seeder error:', err.message);
+  }
 };
 
 module.exports = runSeeders;
