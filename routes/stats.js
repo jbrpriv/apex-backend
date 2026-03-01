@@ -11,7 +11,7 @@ router.get('/overview', async (req, res) => {
     const [total, sold, unsold, banned, unbanned, newAcc] = await Promise.all([
       Account.countDocuments(),
       Account.countDocuments({ salesStatus: 'Sold' }),
-      Account.countDocuments({ salesStatus: 'Unsold' }),
+      Account.countDocuments({ salesStatus: 'Unsold', accountStatus: { $in: ['Unbanned', 'New'] } }),
       Account.countDocuments({ accountStatus: 'Banned' }),
       Account.countDocuments({ accountStatus: 'Unbanned' }),
       Account.countDocuments({ accountStatus: 'New' }),
