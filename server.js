@@ -27,12 +27,22 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 let isConnected = false;
 
 const connectDB = async () => {
+  console.log('connectDB called, isConnected:', isConnected);
   if (isConnected) return;
+  console.log('MONGO_URI exists:', !!process.env.MONGO_URI);
+  console.log('Attempting mongoose.connect...');
   await mongoose.connect(process.env.MONGO_URI);
   isConnected = true;
   console.log('MongoDB connected');
+  console.log('Running seeders...');
   await require('./seeder')();
+  console.log('Seeders done');
 };
+
+connectDB().catch(err => {
+  console.error('MongoDB error type:', err.constructor.name);
+  console.error('MongoDB error message:', err.message);
+});
 
 connectDB().catch(err => console.error('MongoDB error:', err));
 
