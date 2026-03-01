@@ -26,17 +26,26 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 let isConnected = false;
 
+let connectionPromise = null;
+
 const connectDB = async () => {
-  console.log('connectDB called, isConnected:', isConnected);
   if (isConnected) return;
-  console.log('MONGO_URI exists:', !!process.env.MONGO_URI);
-  console.log('Attempting mongoose.connect...');
-  await mongoose.connect(process.env.MONGO_URI);
-  isConnected = true;
-  console.log('MongoDB connected');
-  console.log('Running seeders...');
-  await require('./seeder')();
-  console.log('Seeders done');
+  if (connectionPromise) return connectionPromise;
+  
+  connectionPromise = (async () => {
+    console.log('Attempting mongoose.connect...');
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+    });
+    isConnected = true;
+    console.log('MongoDB connected');
+    console.log('Running seeders...');
+    await require('./seeder')();
+    console.log('Seeders done');
+  })();
+
+  return connectionPromise;
 };
 
 connectDB().catch(err => {
