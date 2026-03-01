@@ -28,4 +28,4 @@ const runSeeders = async () => {
   await seed();
 };
 
-runSeeders().catch(console.error);
+module.exports = runSeeders;

@@ -30,7 +30,7 @@ const connectDB = async () => {
   await mongoose.connect(process.env.MONGO_URI);
   isConnected = true;
   console.log('MongoDB connected');
-  require('./seeder');
+  await require('./seeder')(); // await it
 };
 
 connectDB().catch(err => console.error('MongoDB error:', err));
