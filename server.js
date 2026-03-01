@@ -2,7 +2,6 @@ const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
 require('node:dns/promises').setServers(['8.8.8.8', '8.8.4.4']);
 
-const express = require('express');
 // ... rest of file
 const express = require('express');
 const mongoose = require('mongoose');
