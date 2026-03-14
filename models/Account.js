@@ -4,7 +4,7 @@ const accountSchema = new mongoose.Schema({
   accountStatus: {
     type: String,
     enum: ['New', 'Unbanned', 'Banned'],
-    default: 'New'
+    default: 'Unbanned'
   },
   accountEmail: { type: String, required: true, trim: true },
   accountPassword: { type: String, required: true },
