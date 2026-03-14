@@ -18,6 +18,7 @@ const accountSchema = new mongoose.Schema({
   },
   notes: { type: String, default: '' },
   price: { type: Number, default: 0 },
+  rfrBought: { type: Boolean, default: false },
 }, { timestamps: true });
 
 accountSchema.index({ accountEmail: 1 });
