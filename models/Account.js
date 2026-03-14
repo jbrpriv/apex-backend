@@ -19,6 +19,11 @@ const accountSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
   price: { type: Number, default: 0 },
   rfrBought: { type: Boolean, default: false },
+  rank: {
+    type: String,
+    enum: ['Unranked', 'Silver IV', 'Silver III', 'Silver II', 'Silver I', 'Gold IV', 'Gold III', 'Gold II', 'Gold I', 'Platinum IV', 'Platinum III', 'Platinum II', 'Platinum I', 'Diamond IV', 'Diamond III', 'Diamond II', 'Diamond I'],
+    default: 'Unranked'
+  },
 }, { timestamps: true });
 
 accountSchema.index({ accountEmail: 1 });
