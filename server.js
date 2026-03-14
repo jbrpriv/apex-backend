@@ -51,6 +51,7 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/stats',    require('./routes/stats'));
 app.use('/api/users',    require('./routes/users'));
 app.use('/api/export',   require('./routes/export'));
+app.use('/api/sync',     require('./routes/sync'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
@@ -60,9 +61,22 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Internal server error' });
 });
 
+// ── Start hourly sync cron after DB is connected ─────────────────────────────
+const { startCron } = require('./services/syncService');
+
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, async () => {
+    console.log(`Server running on port ${PORT}`);
+    await connectDB().catch(console.error);
+    if (process.env.APEX_API_KEY) startCron();
+    else console.warn('[Sync] APEX_API_KEY not set — auto-sync disabled');
+  });
+} else {
+  // Production (serverless/etc): start cron on first request
+  connectDB().then(() => {
+    if (process.env.APEX_API_KEY) startCron();
+  }).catch(console.error);
 }
 
 module.exports = app;
