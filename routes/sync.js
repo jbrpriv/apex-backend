@@ -5,16 +5,17 @@ const Account = require('../models/Account');
 const { syncAllEligible, syncOneAccount } = require('../services/syncService');
 // Allow GitHub Actions CI to call sync without JWT
 router.use((req, res, next) => {
-  const ciKey = req.headers['12310231748814313-12731-'];
+  const ciKey = req.headers['x-sync-key'];
+
+  // Allow GitHub Actions
   if (ciKey && ciKey === process.env.SYNC_KEY) {
-    console.log('[Sync] CI key authorized request');
-    return next(); // skip normal auth
+    console.log('[Sync] Authorized via CI key');
+    return next();
   }
-  next(); // otherwise continue to normal authMiddleware
+
+  // Otherwise require normal JWT auth
+  return authMiddleware(req, res, next);
 });
-
-router.use(authMiddleware);
-
 // POST /api/sync — trigger a full bulk sync manually
 router.post('/', async (req, res) => {
   try {
