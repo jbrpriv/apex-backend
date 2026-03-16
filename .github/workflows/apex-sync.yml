@@ -19,7 +19,7 @@ jobs:
           SYNC_KEY: ${{ secrets.SYNC_KEY }}
         run: |
           echo "⏳ Calling /api/accounts/sync endpoint..."
-          RESPONSE=$(curl -s -X POST "https://apex-backend-seven.vercel.app/api/accounts/sync" \
+          RESPONSE=$(curl -s -X POST "https://apex-backend-seven.vercel.app/api/sync" \
             -H "Content-Type: application/json" \
             -H "x-sync-key: $SYNC_KEY")
           echo "💻 Response from server:"
