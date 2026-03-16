@@ -78,16 +78,26 @@ async function syncAllEligible() {
     apexUsername:  { $nin: ['', null], $exists: true },
   }).select('_id apexUsername apexPlatform accountLevel rank');
 
-  if (!accounts.length) return { synced: 0, failed: 0, total: 0, results: [] };
+  const startTime = new Date();
+  console.log(`[Sync] Started bulk sync at ${startTime.toISOString()}`);
+  console.log(`[Sync] Total eligible accounts: ${accounts.length}`);
+
+  if (!accounts.length) {
+    console.log(`[Sync] No accounts to update, ending sync at ${new Date().toISOString()}`);
+    return { synced: 0, failed: 0, total: 0, results: [] };
+  }
 
   const results = [];
   let synced = 0, failed = 0;
 
   for (const acc of accounts) {
+    const accountStart = new Date();
     try {
+      console.log(`[Sync] Updating account: ${acc.apexUsername} (ID: ${acc._id}) at ${accountStart.toISOString()}`);
       const r = await syncOneAccount(acc);
       results.push(r);
       synced++;
+      console.log(`[Sync] Success: ${acc.apexUsername} updated to level ${r.level}, rank ${r.rank} at ${new Date().toISOString()}`);
     } catch (err) {
       await Account.findByIdAndUpdate(acc._id, {
         syncError: err.message,
@@ -95,15 +105,16 @@ async function syncAllEligible() {
       }).catch(() => {});
       results.push({ id: acc._id, username: acc.apexUsername, ok: false, error: err.message });
       failed++;
-      console.error(`[Sync] ${acc.apexUsername}: ${err.message}`);
+      console.error(`[Sync] Failed: ${acc.apexUsername} — ${err.message} at ${new Date().toISOString()}`);
     }
     // Rate limiting: 600ms between calls
     await new Promise(r => setTimeout(r, 600));
   }
 
-  console.log(`[Sync] Done — ${synced}/${accounts.length} updated, ${failed} failed`);
+  console.log(`[Sync] Bulk sync finished at ${new Date().toISOString()} — ${synced}/${accounts.length} updated, ${failed} failed`);
   return { synced, failed, total: accounts.length, results };
 }
+
 
 // ── Hourly cron ─────────────────────────────────────────────────────────────
 let cronTimer = null;
