@@ -3,8 +3,8 @@ name: Apex Sync
 
 on:
   schedule:
-    - cron: "0 * * * *"   # Runs every hour at minute 0 UTC
-  workflow_dispatch:       # Allows manual trigger from GitHub UI
+    - cron: "0 * * * *"   # every hour at minute 0 UTC
+  workflow_dispatch:       # manual trigger
 
 jobs:
   sync:
@@ -15,12 +15,15 @@ jobs:
       - name: Start Apex Sync
         run: echo "📌 Starting Apex sync at $(date -u)"
 
-      # Step 2: Trigger Vercel sync endpoint
+      # Step 2: Trigger Vercel sync endpoint with token
       - name: Call Vercel Sync Endpoint
+        env:
+          SYNC_KEY: ${{ secrets.SYNC_KEY }}  # GitHub secret with your Vercel token
         run: |
           echo "⏳ Calling /api/accounts/sync endpoint..."
           RESPONSE=$(curl -s -X POST "https://apex-backend-seven.vercel.app/api/accounts/sync" \
-            -H "Content-Type: application/json")
+            -H "Content-Type: application/json" \
+            -d '{"key":"'"$SYNC_KEY"'"}')
           echo "💻 Response from server:"
           echo "$RESPONSE"
 
