@@ -1,0 +1,29 @@
+# .github/workflows/apex-sync.yml
+name: Apex Sync
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # Runs every hour at minute 0 UTC
+  workflow_dispatch:       # Allows manual trigger from GitHub UI
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Log start
+      - name: Start Apex Sync
+        run: echo "📌 Starting Apex sync at $(date -u)"
+
+      # Step 2: Trigger Vercel sync endpoint
+      - name: Call Vercel Sync Endpoint
+        run: |
+          echo "⏳ Calling /api/accounts/sync endpoint..."
+          RESPONSE=$(curl -s -X POST "https://apex-backend-seven.vercel.app/api/accounts/sync" \
+            -H "Content-Type: application/json")
+          echo "💻 Response from server:"
+          echo "$RESPONSE"
+
+      # Step 3: Log finish
+      - name: Finish Apex Sync
+        run: echo "✅ Apex sync finished at $(date -u)"
