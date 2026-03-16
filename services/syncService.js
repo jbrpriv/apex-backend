@@ -1,12 +1,15 @@
 /**
- * Apex Legends Account Sync Service
+ * Apex Legends Account Sync Service (Updated with Telegram Notifications)
  * - Calls mozambiquehe.re API for each eligible account (Unsold + Unbanned + has apexUsername)
  * - Updates accountLevel and rank
- * - Runs automatically every hour
+ * - Runs automatically every 12 hours
  * - Can also be triggered manually via POST /api/accounts/sync
+ * - Sends Telegram messages for every sync (manual/auto) and errors
  */
 
 const Account = require('../models/Account');
+const fetch = require('node-fetch'); // Node.js < 18, skip if Node 18+
+const { notifyTelegram } = require('./telegram'); // NEW: telegram helper
 
 // ── Rank mapping ────────────────────────────────────────────────────────────
 const DIV_ROMAN = { 4: 'IV', 3: 'III', 2: 'II', 1: 'I' };
@@ -71,7 +74,7 @@ async function syncOneAccount(account) {
 }
 
 // ── Bulk sync ───────────────────────────────────────────────────────────────
-async function syncAllEligible() {
+async function syncAllEligible(isManual = false) {
   const accounts = await Account.find({
     salesStatus:   'Unsold',
     accountStatus: { $ne: 'Banned' },
@@ -79,11 +82,12 @@ async function syncAllEligible() {
   }).select('_id apexUsername apexPlatform accountLevel rank');
 
   const startTime = new Date();
-  console.log(`[Sync] Started bulk sync at ${startTime.toISOString()}`);
-  console.log(`[Sync] Total eligible accounts: ${accounts.length}`);
+  console.log(`[Sync] Started bulk sync at ${startTime.toISOString()} | Manual: ${isManual}`);
+  await notifyTelegram(`[Sync] Started bulk sync at ${startTime.toISOString()} | ${isManual ? 'Manual' : 'Automatic'}`); // NEW
 
   if (!accounts.length) {
     console.log(`[Sync] No accounts to update, ending sync at ${new Date().toISOString()}`);
+    await notifyTelegram(`[Sync] No accounts to update. Ending sync.`);
     return { synced: 0, failed: 0, total: 0, results: [] };
   }
 
@@ -106,15 +110,18 @@ async function syncAllEligible() {
       results.push({ id: acc._id, username: acc.apexUsername, ok: false, error: err.message });
       failed++;
       console.error(`[Sync] Failed: ${acc.apexUsername} — ${err.message} at ${new Date().toISOString()}`);
+      await notifyTelegram(`[Sync Error] ${acc.apexUsername} — ${err.message}`); // NEW
     }
     // Rate limiting: 600ms between calls
     await new Promise(r => setTimeout(r, 600));
   }
 
-  console.log(`[Sync] Bulk sync finished at ${new Date().toISOString()} — ${synced}/${accounts.length} updated, ${failed} failed`);
+  const endTime = new Date();
+  console.log(`[Sync] Bulk sync finished at ${endTime.toISOString()} — ${synced}/${accounts.length} updated, ${failed} failed`);
+  await notifyTelegram(`[Sync] Finished: ${synced}/${accounts.length} updated, ${failed} failed | Duration: ${(endTime - startTime)/1000}s`); // NEW
+
   return { synced, failed, total: accounts.length, results };
 }
-
 
 // ── Hourly cron ─────────────────────────────────────────────────────────────
 let cronTimer = null;
@@ -125,9 +132,10 @@ function startCron() {
   const run = async () => {
     console.log('[Sync] Hourly auto-sync starting…');
     try {
-      await syncAllEligible();
+      await syncAllEligible(false); // false = automatic
     } catch (err) {
       console.error('[Sync] Hourly error:', err.message);
+      await notifyTelegram(`[Sync Cron Error] ${err.message}`);
     }
   };
   setTimeout(run, 10_000); // first run 10s after startup
