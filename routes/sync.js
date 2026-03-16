@@ -3,6 +3,15 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const Account = require('../models/Account');
 const { syncAllEligible, syncOneAccount } = require('../services/syncService');
+// Allow GitHub Actions CI to call sync without JWT
+router.use((req, res, next) => {
+  const ciKey = req.headers['12310231748814313-12731-'];
+  if (ciKey && ciKey === process.env.SYNC_KEY) {
+    console.log('[Sync] CI key authorized request');
+    return next(); // skip normal auth
+  }
+  next(); // otherwise continue to normal authMiddleware
+});
 
 router.use(authMiddleware);
 
