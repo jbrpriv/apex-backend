@@ -8,8 +8,19 @@
  */
 
 const Account = require('../models/Account');
-const fetch = require('node-fetch'); // Node.js < 18, skip if Node 18+
-const { notifyTelegram } = require('./telegram'); // NEW: telegram helper
+const { notifyTelegram } = require('../utils/telegram'); // Telegram notification helper
+
+// Use built-in fetch (Node 18+) or fall back to node-fetch
+let fetchFn;
+try {
+  fetchFn = fetch;
+} catch {
+  try {
+    fetchFn = require('node-fetch');
+  } catch {
+    console.error('[Sync] node-fetch not available and Node < 18. Sync will not work.');
+  }
+}
 
 // ── Rank mapping ────────────────────────────────────────────────────────────
 const DIV_ROMAN = { 4: 'IV', 3: 'III', 2: 'II', 1: 'I' };
@@ -44,7 +55,7 @@ async function syncOneAccount(account) {
 
   let res;
   try {
-    res = await fetch(url, { signal: controller.signal });
+    res = await fetchFn(url, { signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
