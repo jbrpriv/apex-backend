@@ -69,19 +69,36 @@ async function syncOneAccount(account) {
   if (!data?.global) throw new Error('Unexpected API response — no global object');
   if (data.Error)    throw new Error(`API error: ${data.Error}`);
 
-  const level = data.global.level != null ? data.global.level : account.accountLevel;
-  const rank  = data.global.rank
+  const newLevel = data.global.level != null ? data.global.level : account.accountLevel;
+  const newRank  = data.global.rank
     ? parseRank(data.global.rank.rankName, data.global.rank.rankDiv)
     : account.rank;
 
+  // Check if there was an actual change
+  const levelChanged = newLevel !== account.accountLevel;
+  const rankChanged = newRank !== account.rank;
+  const hasChanged = levelChanged || rankChanged;
+
   await Account.findByIdAndUpdate(account._id, {
-    accountLevel: level,
-    rank,
+    accountLevel: newLevel,
+    rank: newRank,
     lastSynced: new Date(),
     syncError: '',
   });
 
-  return { id: account._id, username: account.apexUsername, level, rank, ok: true };
+  return {
+    id: account._id,
+    username: account.apexUsername,
+    email: account.accountEmail,
+    oldLevel: account.accountLevel,
+    newLevel,
+    oldRank: account.rank,
+    newRank,
+    levelChanged,
+    rankChanged,
+    hasChanged,
+    ok: true
+  };
 }
 
 // ── Bulk sync ───────────────────────────────────────────────────────────────
@@ -90,48 +107,74 @@ async function syncAllEligible(isManual = false) {
     salesStatus:   'Unsold',
     accountStatus: { $ne: 'Banned' },
     apexUsername:  { $nin: ['', null], $exists: true },
-  }).select('_id apexUsername apexPlatform accountLevel rank');
+  }).select('_id apexUsername apexPlatform accountLevel rank accountEmail');
 
   const startTime = new Date();
   console.log(`[Sync] Started bulk sync at ${startTime.toISOString()} | Manual: ${isManual}`);
-  await notifyTelegram(`[Sync] Started bulk sync at ${startTime.toISOString()} | ${isManual ? 'Manual' : 'Automatic'}`); // NEW
+  await notifyTelegram(`[Sync] Started bulk sync at ${startTime.toISOString()} | ${isManual ? 'Manual' : 'Automatic'}`);
 
   if (!accounts.length) {
     console.log(`[Sync] No accounts to update, ending sync at ${new Date().toISOString()}`);
     await notifyTelegram(`[Sync] No accounts to update. Ending sync.`);
-    return { synced: 0, failed: 0, total: 0, results: [] };
+    return { synced: 0, checked: 0, failed: 0, total: 0, promoted: [], results: [] };
   }
 
   const results = [];
-  let synced = 0, failed = 0;
+  const promoted = [];
+  let synced = 0, checked = 0, failed = 0;
 
   for (const acc of accounts) {
     const accountStart = new Date();
     try {
-      console.log(`[Sync] Updating account: ${acc.apexUsername} (ID: ${acc._id}) at ${accountStart.toISOString()}`);
+      console.log(`[Sync] Checking account: ${acc.apexUsername} (ID: ${acc._id}) at ${accountStart.toISOString()}`);
       const r = await syncOneAccount(acc);
       results.push(r);
-      synced++;
-      console.log(`[Sync] Success: ${acc.apexUsername} updated to level ${r.level}, rank ${r.rank} at ${new Date().toISOString()}`);
+      checked++;
+
+      if (r.hasChanged) {
+        synced++;
+        const promotionSummary = [];
+        if (r.levelChanged) promotionSummary.push(`Level ${r.oldLevel}→${r.newLevel}`);
+        if (r.rankChanged) promotionSummary.push(`Rank ${r.oldRank}→${r.newRank}`);
+        
+        const promotedEntry = {
+          username: r.username,
+          email: r.email,
+          changes: promotionSummary.join(', ')
+        };
+        promoted.push(promotedEntry);
+
+        console.log(`[Sync] Promoted: ${acc.apexUsername} (${promotionSummary.join(', ')}) at ${new Date().toISOString()}`);
+      } else {
+        console.log(`[Sync] No changes for ${acc.apexUsername} at ${new Date().toISOString()}`);
+      }
     } catch (err) {
       await Account.findByIdAndUpdate(acc._id, {
         syncError: err.message,
         lastSynced: new Date(),
       }).catch(() => {});
       results.push({ id: acc._id, username: acc.apexUsername, ok: false, error: err.message });
+      checked++;
       failed++;
       console.error(`[Sync] Failed: ${acc.apexUsername} — ${err.message} at ${new Date().toISOString()}`);
-      await notifyTelegram(`[Sync Error] ${acc.apexUsername} — ${err.message}`); // NEW
+      await notifyTelegram(`[Sync Error] ${acc.apexUsername} — ${err.message}`);
     }
     // Rate limiting: 600ms between calls
     await new Promise(r => setTimeout(r, 600));
   }
 
   const endTime = new Date();
-  console.log(`[Sync] Bulk sync finished at ${endTime.toISOString()} — ${synced}/${accounts.length} updated, ${failed} failed`);
-  await notifyTelegram(`[Sync] Finished: ${synced}/${accounts.length} updated, ${failed} failed | Duration: ${(endTime - startTime)/1000}s`); // NEW
+  let summaryMessage = `[Sync] Finished: ${synced} promoted, ${checked - synced - failed} unchanged, ${failed} failed | Duration: ${(endTime - startTime)/1000}s`;
+  
+  if (promoted.length > 0) {
+    const promotionList = promoted.map(p => `• ${p.username} (${p.email}): ${p.changes}`).join('\n');
+    summaryMessage += `\n\n🚀 Promoted:\n${promotionList}`;
+  }
 
-  return { synced, failed, total: accounts.length, results };
+  console.log(`[Sync] Bulk sync finished at ${endTime.toISOString()} — ${synced}/${checked} promoted, ${checked - synced - failed} unchanged, ${failed} failed`);
+  await notifyTelegram(summaryMessage);
+
+  return { synced, checked, failed, total: accounts.length, promoted, results };
 }
 
 // ── Hourly cron ─────────────────────────────────────────────────────────────

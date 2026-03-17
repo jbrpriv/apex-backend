@@ -22,8 +22,13 @@ router.post('/', async (req, res) => {
     console.log('[Sync] Manual sync triggered');
     const result = await syncAllEligible(true); // ← pass true to mark as manual
     res.json({
-      message: `Sync complete: ${result.synced} updated, ${result.failed} failed out of ${result.total}`,
-      ...result,
+      message: `Sync complete: ${result.synced} promoted, ${result.checked - result.synced - result.failed} unchanged, ${result.failed} failed`,
+      synced: result.synced,
+      checked: result.checked,
+      failed: result.failed,
+      total: result.total,
+      promoted: result.promoted,
+      results: result.results,
     });
   } catch (err) {
     console.error('[Sync] Manual sync error:', err.message);
@@ -35,7 +40,7 @@ router.post('/', async (req, res) => {
 router.post('/:id', async (req, res) => {
   try {
     const account = await Account.findById(req.params.id)
-      .select('_id apexUsername apexPlatform accountLevel rank salesStatus accountStatus');
+      .select('_id apexUsername apexPlatform accountLevel rank accountEmail salesStatus accountStatus');
 
     if (!account)              return res.status(404).json({ message: 'Account not found' });
     if (!account.apexUsername) return res.status(400).json({ message: 'No Apex username set on this account' });
@@ -43,7 +48,13 @@ router.post('/:id', async (req, res) => {
     if (account.salesStatus   === 'Sold')   return res.status(400).json({ message: 'Account is sold — skipping sync' });
 
     const result = await syncOneAccount(account);
-    res.json({ message: `Synced ${account.apexUsername} — Level ${result.level}, Rank ${result.rank}`, ...result });
+    const changesSummary = result.hasChanged 
+      ? `(${[result.levelChanged ? `Level ${result.oldLevel}→${result.newLevel}` : null, result.rankChanged ? `Rank ${result.oldRank}→${result.newRank}` : null].filter(Boolean).join(', ')})`
+      : '(No changes)';
+    res.json({ 
+      message: `Synced ${account.apexUsername} — ${changesSummary}`,
+      ...result 
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
