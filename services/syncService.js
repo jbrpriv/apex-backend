@@ -8,9 +8,8 @@
  */
 
 const Account = require('../models/Account');
-const { notifyTelegram } = require('../utils/telegram'); // Telegram notification helper
+const { notifyTelegram } = require('../utils/telegram');
 
-// Use built-in fetch (Node 18+) or fall back to node-fetch
 let fetchFn;
 try {
   fetchFn = fetch;
@@ -74,16 +73,15 @@ async function syncOneAccount(account) {
     ? parseRank(data.global.rank.rankName, data.global.rank.rankDiv)
     : account.rank;
 
-  // Check if there was an actual change
   const levelChanged = newLevel !== account.accountLevel;
-  const rankChanged = newRank !== account.rank;
-  const hasChanged = levelChanged || rankChanged;
+  const rankChanged  = newRank  !== account.rank;
+  const hasChanged   = levelChanged || rankChanged;
 
   await Account.findByIdAndUpdate(account._id, {
     accountLevel: newLevel,
-    rank: newRank,
-    lastSynced: new Date(),
-    syncError: '',
+    rank:         newRank,
+    lastSynced:   new Date(),
+    syncError:    '',
   });
 
   return {
@@ -97,7 +95,7 @@ async function syncOneAccount(account) {
     levelChanged,
     rankChanged,
     hasChanged,
-    ok: true
+    ok: true,
   };
 }
 
@@ -119,7 +117,7 @@ async function syncAllEligible(isManual = false) {
     return { synced: 0, checked: 0, failed: 0, total: 0, promoted: [], results: [] };
   }
 
-  const results = [];
+  const results  = [];
   const promoted = [];
   let synced = 0, checked = 0, failed = 0;
 
@@ -135,22 +133,15 @@ async function syncAllEligible(isManual = false) {
         synced++;
         const promotionSummary = [];
         if (r.levelChanged) promotionSummary.push(`Level ${r.oldLevel}→${r.newLevel}`);
-        if (r.rankChanged) promotionSummary.push(`Rank ${r.oldRank}→${r.newRank}`);
-        
-        const promotedEntry = {
-          username: r.username,
-          email: r.email,
-          changes: promotionSummary.join(', ')
-        };
-        promoted.push(promotedEntry);
-
+        if (r.rankChanged)  promotionSummary.push(`Rank ${r.oldRank}→${r.newRank}`);
+        promoted.push({ username: r.username, email: r.email, changes: promotionSummary.join(', ') });
         console.log(`[Sync] Promoted: ${acc.apexUsername} (${promotionSummary.join(', ')}) at ${new Date().toISOString()}`);
       } else {
         console.log(`[Sync] No changes for ${acc.apexUsername} at ${new Date().toISOString()}`);
       }
     } catch (err) {
       await Account.findByIdAndUpdate(acc._id, {
-        syncError: err.message,
+        syncError:  err.message,
         lastSynced: new Date(),
       }).catch(() => {});
       results.push({ id: acc._id, username: acc.apexUsername, ok: false, error: err.message });
@@ -164,8 +155,7 @@ async function syncAllEligible(isManual = false) {
   }
 
   const endTime = new Date();
-  let summaryMessage = `[Sync] Finished: ${synced} promoted, ${checked - synced - failed} unchanged, ${failed} failed | Duration: ${(endTime - startTime)/1000}s`;
-  
+  let summaryMessage = `[Sync] Finished: ${synced} promoted, ${checked - synced - failed} unchanged, ${failed} failed | Duration: ${(endTime - startTime) / 1000}s`;
   if (promoted.length > 0) {
     const promotionList = promoted.map(p => `• ${p.username} (${p.email}): ${p.changes}`).join('\n');
     summaryMessage += `\n\n🚀 Promoted:\n${promotionList}`;
@@ -177,24 +167,27 @@ async function syncAllEligible(isManual = false) {
   return { synced, checked, failed, total: accounts.length, promoted, results };
 }
 
-// ── Hourly cron ─────────────────────────────────────────────────────────────
+// ── Cron (only used in non-serverless / local dev environments) ─────────────
 let cronTimer = null;
-const HOUR_MS = 12 * 60 * 60 * 1000; // 12 hours
+const HOUR_MS = 12 * 60 * 60 * 1000;
 
 function startCron() {
   if (cronTimer) return;
-  const run = async () => {
-    console.log('[Sync] Hourly auto-sync starting…');
+  // FIX: removed setTimeout(run, 10_000) which fired a full sync on every
+  // cold start — on Vercel serverless this meant every page load triggered sync.
+  // GitHub Actions handles the scheduled syncing reliably, so no immediate
+  // run is needed here. The setInterval below is kept for local dev only
+  // (it won't survive a Vercel serverless instance shutdown anyway).
+  cronTimer = setInterval(async () => {
+    console.log('[Sync] Auto-sync starting…');
     try {
-      await syncAllEligible(false); // false = automatic
+      await syncAllEligible(false);
     } catch (err) {
-      console.error('[Sync] Hourly error:', err.message);
+      console.error('[Sync] Auto-sync error:', err.message);
       await notifyTelegram(`[Sync Cron Error] ${err.message}`);
     }
-  };
-  setTimeout(run, 10_000); // first run 10s after startup
-  cronTimer = setInterval(run, HOUR_MS);
-  console.log('[Sync] Auto-sync cron registered (every 12 hours)');
+  }, HOUR_MS);
+  console.log('[Sync] Auto-sync cron registered (every 12 hours, local dev only)');
 }
 
 function stopCron() {
