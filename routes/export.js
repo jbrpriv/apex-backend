@@ -19,17 +19,51 @@ const authForExport = (req, res, next) => {
 router.get('/csv', authForExport, async (req, res) => {
   try {
     const accounts = await Account.find().sort({ createdAt: -1 });
-    const header = ['Email','Password','Additional Password','Recovery','Level','Account Status','Sales Status','Price','Notes','Created At'];
+
+    const header = [
+      'Email',
+      'Password',
+      'Additional Password',
+      'Recovery Email',
+      'Account Status',
+      'Sales Status',
+      'Level',
+      'Rank',
+      'RFR Bought',
+      'Price (Rs)',
+      'Apex Username',
+      'Apex Platform',
+      'Last Synced',
+      'Sync Error',
+      'Notes',
+      'Created At',
+      'Updated At',
+    ];
+
     const rows = accounts.map(a => [
-      a.accountEmail, a.accountPassword,
-      a.additionalAccountPassword || '-', a.accountRecovery || '-',
-      a.accountLevel, a.accountStatus, a.salesStatus,
-      a.price || 0, a.notes || '',
-      a.createdAt.toISOString()
+      a.accountEmail,
+      a.accountPassword,
+      a.additionalAccountPassword || '-',
+      a.accountRecovery           || '-',
+      a.accountStatus,
+      a.salesStatus,
+      a.accountLevel,
+      a.rank                      || 'Unranked',
+      a.rfrBought ? 'Yes' : 'No',
+      a.price                     || 0,
+      a.apexUsername              || '-',
+      a.apexPlatform              || 'PC',
+      a.lastSynced ? a.lastSynced.toISOString() : '-',
+      a.syncError                 || '-',
+      a.notes                     || '-',
+      a.createdAt.toISOString(),
+      a.updatedAt.toISOString(),
     ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
+
     const csv = [header.join(','), ...rows].join('\n');
+
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="accounts-' + Date.now() + '.csv"');
+    res.setHeader('Content-Disposition', `attachment; filename="accounts-${Date.now()}.csv"`);
     res.send(csv);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -40,8 +74,31 @@ router.get('/csv', authForExport, async (req, res) => {
 router.get('/json', authForExport, async (req, res) => {
   try {
     const accounts = await Account.find().sort({ createdAt: -1 });
-    res.setHeader('Content-Disposition', 'attachment; filename="accounts-' + Date.now() + '.json"');
-    res.json(accounts);
+
+    // Shape each account into a clean, ordered object instead of raw mongoose doc
+    const data = accounts.map(a => ({
+      id:                       a._id,
+      accountEmail:             a.accountEmail,
+      accountPassword:          a.accountPassword,
+      additionalAccountPassword: a.additionalAccountPassword || '-',
+      accountRecovery:          a.accountRecovery            || '-',
+      accountStatus:            a.accountStatus,
+      salesStatus:              a.salesStatus,
+      accountLevel:             a.accountLevel,
+      rank:                     a.rank                       || 'Unranked',
+      rfrBought:                a.rfrBought,
+      price:                    a.price                      || 0,
+      apexUsername:             a.apexUsername               || '-',
+      apexPlatform:             a.apexPlatform               || 'PC',
+      lastSynced:               a.lastSynced                 || null,
+      syncError:                a.syncError                  || null,
+      notes:                    a.notes                      || '-',
+      createdAt:                a.createdAt,
+      updatedAt:                a.updatedAt,
+    }));
+
+    res.setHeader('Content-Disposition', `attachment; filename="accounts-${Date.now()}.json"`);
+    res.json(data);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
