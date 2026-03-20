@@ -61,10 +61,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Internal server error' });
 });
 
-// ── Start hourly sync cron after DB is connected ─────────────────────────────
-const { startCron } = require('./services/syncService');
-
+// ── Cron: local dev only ─────────────────────────────────────────────────────
+// FIX: removed startCron() from the production branch entirely.
+// On Vercel (serverless) the instance dies after each request so setInterval
+// never fires anyway — and the old setTimeout(run, 10s) was triggering a full
+// sync on every cold start (i.e. every page load).
+// Scheduling is handled exclusively by GitHub Actions (.github/workflows/apex-sync.yml).
 if (process.env.NODE_ENV !== 'production') {
+  const { startCron } = require('./services/syncService');
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
@@ -72,11 +76,6 @@ if (process.env.NODE_ENV !== 'production') {
     if (process.env.APEX_API_KEY) startCron();
     else console.warn('[Sync] APEX_API_KEY not set — auto-sync disabled');
   });
-} else {
-  // Production (serverless/etc): start cron on first request
-  connectDB().then(() => {
-    if (process.env.APEX_API_KEY) startCron();
-  }).catch(console.error);
 }
 
 module.exports = app;
