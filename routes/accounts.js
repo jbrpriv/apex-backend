@@ -1,7 +1,29 @@
 const express = require('express');
 const router = express.Router();
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Account = require('../models/Account');
 const authMiddleware = require('../middleware/auth');
+
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Multer + Cloudinary storage
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'apex-accounts',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ quality: 'auto', fetch_format: 'auto' }]
+  }
+});
+
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB max
 
 router.use(authMiddleware);
 
@@ -127,6 +149,28 @@ router.delete('/:id', async (req, res) => {
     const account = await Account.findByIdAndDelete(req.params.id);
     if (!account) return res.status(404).json({ message: 'Account not found' });
     res.json({ message: 'Account deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/accounts/:id/images
+router.post('/:id/images', upload.fields([{ name: 'lobbyImage', maxCount: 1 }, { name: 'statsImage', maxCount: 1 }]), async (req, res) => {
+  try {
+    const update = {};
+    if (req.files && req.files['lobbyImage'] && req.files['lobbyImage'][0]) {
+      update.lobbyImage = req.files['lobbyImage'][0].path;
+    }
+    if (req.files && req.files['statsImage'] && req.files['statsImage'][0]) {
+      update.statsImage = req.files['statsImage'][0].path;
+    }
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ message: 'No images provided' });
+    }
+    
+    const account = await Account.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!account) return res.status(404).json({ message: 'Account not found' });
+    res.json(account);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

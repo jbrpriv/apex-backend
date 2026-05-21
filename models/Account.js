@@ -37,6 +37,8 @@ const accountSchema = new mongoose.Schema({
 
   // ── Apex API sync fields ──────────────────────────────
   apexUsername: { type: String, default: '', trim: true },       // e.g. "tashbottle7001"
+  lobbyImage:   { type: String, default: '' },                   // Cloudinary URL for lobby screenshot
+  statsImage:   { type: String, default: '' },                   // Cloudinary URL for stats screenshot
   apexPlatform: {
     type: String,
     enum: ['PC', 'PS4', 'X1'],
