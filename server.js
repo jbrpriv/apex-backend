@@ -52,6 +52,7 @@ app.use('/api/stats',    require('./routes/stats'));
 app.use('/api/users',    require('./routes/users'));
 app.use('/api/export',   require('./routes/export'));
 app.use('/api/sync',     require('./routes/sync'));
+app.use('/api/bot',      require('./routes/bot'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
