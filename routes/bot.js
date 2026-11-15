@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const BotLog = require('../models/BotLog');
 const BotStatus = require('../models/BotStatus');
+const BotFrame = require('../models/BotFrame');
 const authMiddleware = require('../middleware/auth');
 
 // Bot is considered offline if no heartbeat for this long
@@ -93,6 +94,43 @@ router.get('/feed', authMiddleware, async (req, res) => {
       },
       logs: logs.map(l => ({ id: l._id, level: l.level, message: l.message, ts: l.ts })),
       serverTime: new Date()
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/bot/screen — raw image/jpeg body (bot key). Keeps only the latest frame.
+router.post('/screen', botKeyAuth, express.raw({ type: 'image/jpeg', limit: '2mb' }), async (req, res) => {
+  try {
+    const buf = req.body;
+    if (!Buffer.isBuffer(buf) || buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) {
+      return res.status(400).json({ message: 'Expected image/jpeg body' });
+    }
+    await BotFrame.findOneAndUpdate(
+      { key: 'main' },
+      { key: 'main', image: buf, width: Number(req.headers['x-img-width']) || 0, updatedAt: new Date() },
+      { upsert: true }
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/bot/screen?since=<ISO> (JWT) — latest frame as a data URL, or { unchanged: true }
+router.get('/screen', authMiddleware, async (req, res) => {
+  try {
+    const doc = await BotFrame.findOne({ key: 'main' });
+    if (!doc) return res.json({ image: null });
+    const since = req.query.since ? new Date(req.query.since).getTime() : 0;
+    if (since && since >= doc.updatedAt.getTime()) {
+      return res.json({ unchanged: true, updatedAt: doc.updatedAt });
+    }
+    res.json({
+      image: 'data:image/jpeg;base64,' + doc.image.toString('base64'),
+      width: doc.width,
+      updatedAt: doc.updatedAt
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
