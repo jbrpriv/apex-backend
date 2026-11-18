@@ -4,6 +4,7 @@ const router = express.Router();
 const BotLog = require('../models/BotLog');
 const BotStatus = require('../models/BotStatus');
 const BotFrame = require('../models/BotFrame');
+const BotCommand = require('../models/BotCommand');
 const authMiddleware = require('../middleware/auth');
 
 // Bot is considered offline if no heartbeat for this long
@@ -142,6 +143,45 @@ router.delete('/logs', authMiddleware, async (req, res) => {
   try {
     await BotLog.deleteMany({});
     res.json({ message: 'Logs cleared' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/bot/command (JWT) — dashboard queues a command for the bot
+// body: { type: 'escBtn' | 'spaceBtn' | 'enterBtn' | 'mouse', text?: string }
+router.post('/command', authMiddleware, async (req, res) => {
+  try {
+    const type = String(req.body.type || '');
+    if (!['escBtn', 'spaceBtn', 'enterBtn', 'mouse'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid command type' });
+    }
+    const text = String(req.body.text || '').trim().slice(0, 60);
+    if (type === 'mouse' && !text) {
+      return res.status(400).json({ message: 'Mouse command needs a keyword' });
+    }
+    const cmd = await BotCommand.create({ type, text: type === 'mouse' ? text : '' });
+    res.json({ ok: true, id: cmd._id });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/bot/commands (bot key) — bot polls this; returns and claims pending commands
+router.get('/commands', botKeyAuth, async (req, res) => {
+  try {
+    const fresh = new Date(Date.now() - 30 * 1000);   // ignore anything older than 30s
+    const commands = [];
+    for (let i = 0; i < 10; i++) {
+      const c = await BotCommand.findOneAndUpdate(
+        { claimed: false, createdAt: { $gte: fresh } },
+        { claimed: true },
+        { sort: { createdAt: 1 }, new: true }
+      ).lean();
+      if (!c) break;
+      commands.push({ id: c._id, type: c.type, text: c.text });
+    }
+    res.json({ commands });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
